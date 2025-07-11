@@ -1,7 +1,7 @@
 import submitit
 from pathlib import Path
 from simulation.main import prepare_simulation
-from scellst_reproducibility.submit_scripts.script_constants import log_dir, data_path
+from sCellST_reproducibility.submit_scripts.script_constants import log_dir, data_path
 
 # Configuration
 ref_adata_path = Path("data/raw_ovarian_dataset.h5ad")

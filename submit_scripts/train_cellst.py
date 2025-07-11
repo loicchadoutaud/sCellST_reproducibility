@@ -3,8 +3,9 @@ from pathlib import Path
 
 from sklearn.model_selection import ParameterGrid
 
+from scellst.constant import PROJ_ROOT
 from scellst.train import train_and_save
-from scellst_reproducibility.submit_scripts.script_constants import (
+from sCellST_reproducibility.submit_scripts.script_constants import (
     benchmark_organs,
     benchmark_genes,
     visium_slides,
@@ -13,16 +14,15 @@ from scellst_reproducibility.submit_scripts.script_constants import (
 )
 
 # Configuration
-config_dir = Path("/cluster/CBIO/home/lchadoutaud1/code/CellST/config")
-config_default_path = config_dir / "gene_default.yaml"
-config_simulation_path = config_dir / "gene_simulation.yaml"
+config_default_path = PROJ_ROOT / "config" / "gene_default.yaml"
+config_simulation_path = PROJ_ROOT / "config" / "gene_simulation.yaml"
 
 
 if __name__ == "__main__":
     # Initialize submitit executor
     executor = submitit.AutoExecutor(folder=log_dir)
     executor.update_parameters(
-        slurm_array_parallelism=8,
+        slurm_array_parallelism=4,
         slurm_partition="cbio-gpu",
         mem_gb=64,
         gpus_per_node=1,
@@ -32,7 +32,7 @@ if __name__ == "__main__":
         slurm_exclude="node005,node006",
     )
 
-    with (executor.batch()):
+    with executor.batch():
         # Simulation MIL sCellST
         config_kwargs = {"data_dir": data_path, "save_dir_tag": "simulation"}
         param_grid = {
@@ -46,7 +46,6 @@ if __name__ == "__main__":
             "embedding_tag": ["moco-TENX65-rn50", "one-hot-celltype"],
             "dataset_handler": ["mil"],
             "task_type": ["regression", "nb_mean_regression", "nb_total_regression"],
-            "scale": ["no_scaling"],
         }
         configurations = list(ParameterGrid(param_grid))
         for additional_kwargs in configurations:
@@ -62,7 +61,6 @@ if __name__ == "__main__":
             "embedding_tag": ["moco-TENX65-rn50"],
             "dataset_handler": ["supervised"],
             "task_type": ["regression"],
-            "scale": ["no_scaling"],
         }
         configurations = list(ParameterGrid(param_grid))
         for additional_kwargs in configurations:

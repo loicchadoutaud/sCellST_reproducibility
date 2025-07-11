@@ -1,6 +1,5 @@
 import logging
 import os
-from itertools import combinations
 from pathlib import Path
 
 import cv2
@@ -9,18 +8,26 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 import seaborn as sns
+from PIL import Image
 from anndata import AnnData
 from matplotlib import pyplot as plt, cm
 from matplotlib.axes import Axes
 from matplotlib.colors import Normalize, LogNorm
 from matplotlib.patches import Patch
+from mpl_toolkits.axes_grid1 import ImageGrid
 from numpy import ndarray
 from openslide import OpenSlide
 from pandas import DataFrame
 from sklearn.preprocessing import MinMaxScaler
+from statannotations.Annotator import Annotator
 from tqdm.auto import tqdm
 
-from scellst.constant import SUB_CLASS_LABELS, COLOR_MAP
+from scellst.constant import (
+    SUB_CLASS_LABELS,
+    COLOR_MAP,
+    GENE_2_CELLTYPE,
+    GROUP_2_CELLTYPE,
+)
 
 DPI = 300
 
@@ -30,7 +37,7 @@ sns.set_style("whitegrid")
 logger = logging.getLogger(__name__)
 
 
-def plot_he(adata: AnnData, title: str, save_path: str, obs_color: str = None) -> None:
+def plot_he(adata: AnnData, title: str, save_path: Path, obs_color: str = None) -> None:
     alpha = 0.5 if obs_color is not None else None
     fig, ax = plt.subplots(1, 1, figsize=(5, 4))
     sc.pl.spatial(
@@ -45,7 +52,7 @@ def plot_he(adata: AnnData, title: str, save_path: str, obs_color: str = None) -
     ax.set_axis_off()
     if ax.get_legend() is not None:
         ax.get_legend().remove()
-    fig.savefig(save_path, dpi=DPI)
+    fig.savefig(save_path, bbox_inches="tight", dpi=DPI)
 
 
 def create_overlayed_image(
@@ -72,9 +79,9 @@ def create_overlayed_image(
     overlay_y = h - overlay_h
 
     # Place the overlay image on the main image
-    main_image[
-        overlay_y : overlay_y + overlay_h, overlay_x : overlay_x + overlay_w
-    ] = overlay_resized
+    main_image[overlay_y : overlay_y + overlay_h, overlay_x : overlay_x + overlay_w] = (
+        overlay_resized
+    )
 
     # Draw a red border around the overlay image
     cv2.rectangle(
@@ -223,7 +230,7 @@ def plot_list_gene_image(
     cell_adata: AnnData,
     wsi_image: ndarray,
     list_gene_name: list[str],
-    save_path: str,
+    save_path: Path,
     img_level: int,
 ) -> None:
     # Create image
@@ -359,7 +366,7 @@ def plot_xenium_list_gene_image(
 
 
 def plot_signature_score(
-    adata: AnnData, obs_key: str, list_scores: list[str], save_path: str
+    adata: AnnData, obs_key: str, list_scores: list[str], save_path: Path, add_stat_test: bool = False,
 ) -> None:
     # Prepare data
     adata = adata[adata.obs[obs_key].isin(SUB_CLASS_LABELS)]
@@ -384,10 +391,30 @@ def plot_signature_score(
     ax.set_title("Distribution of different cell type score.")
     sns.move_legend(ax, "upper left", bbox_to_anchor=(1, 1))
     sns.despine(fig)
+
+    # Add statistical significance
+    if add_stat_test:
+        pairs = []
+        for group in df_plot["group"].unique():
+            cell_type = GROUP_2_CELLTYPE[group]
+            other_celltypes = [ct for ct in SUB_CLASS_LABELS if ct != cell_type]
+            pairs.extend([((group, cell_type), (group, ct)) for ct in other_celltypes])
+        annot = Annotator(
+            ax, pairs, data=df_plot, x="group", y="min-max scaled score", hue="class"
+        )
+        annot.configure(
+            test="Mann-Whitney",
+            comparisons_correction="Bonferroni",
+            text_format="star",
+            verbose=2,
+        )
+        annot.apply_test()
+        annot.annotate()
+
     fig.savefig(save_path, bbox_inches="tight", dpi=DPI)
 
 
-def plot_corr_score(adata: AnnData, list_scores: list[str], save_path: str) -> None:
+def plot_corr_score(adata: AnnData, list_scores: list[str], save_path: Path) -> None:
     hm = sns.clustermap(
         data=adata.obs[list_scores].corr(),
         vmin=-1,
@@ -404,7 +431,7 @@ def plot_corr_score(adata: AnnData, list_scores: list[str], save_path: str) -> N
 
 
 def plot_top_genes_2(
-    adata: AnnData, hue: str, list_scores: list[str], save_path
+    adata: AnnData, hue: str, list_scores: list[str], save_path, add_stat_test: bool = False
 ) -> None:
     palette = COLOR_MAP if hue == "class" else None
 
@@ -424,6 +451,24 @@ def plot_top_genes_2(
     axes.set_title(f"Gene score distribution\n (min-max scaled)")
     sns.move_legend(axes, "upper left", bbox_to_anchor=(1, 1))
     sns.despine()
+
+    # Add statistical significance
+    if add_stat_test:
+        pairs = []
+        for gene in df["gene"].unique():
+            cell_type = GENE_2_CELLTYPE[gene]
+            other_celltypes = [ct for ct in SUB_CLASS_LABELS if ct != cell_type]
+            pairs.extend([((gene, cell_type), (gene, ct)) for ct in other_celltypes])
+        annot = Annotator(axes, pairs, data=df, x="gene", y="expression", hue=hue)
+        annot.configure(
+            test="Mann-Whitney",
+            comparisons_correction="Bonferroni",
+            text_format="star",
+            verbose=2,
+        )
+        annot.apply_test()
+        annot.annotate()
+
     fig.savefig(
         os.path.join(save_path, f"gene_distribution_boxplot.png"),
         bbox_inches="tight",
@@ -435,7 +480,7 @@ def plot_gene_gallery(
     adata: AnnData,
     color: str,
     wsi: OpenSlide,
-    save_path: str,
+    save_path: Path,
     img_size: int = 48,
     title: str | None = None,
 ) -> None:
@@ -461,13 +506,45 @@ def plot_gene_gallery(
         )
         ax.imshow(img)
         ax.set_axis_off()
+
     fig.subplots_adjust(wspace=0.05, hspace=0.05)
     fig.suptitle(title, y=0.92, fontsize=90)
     fig.savefig(save_path, bbox_inches="tight", dpi=DPI)
     plt.close()
 
 
-def plot_marker_genes(adata: AnnData, obs_key: str, save_path: str) -> list[str]:
+def plot_full_gallery(
+    img_dir: Path,
+    list_score_to_plot: list[str],
+    save_path: Path,
+) -> None:
+    if save_path.exists():
+        os.remove(save_path)
+    img_paths = [img_dir / f"gallery_{s}.png" for s in list_score_to_plot]
+    n = len(img_paths)
+    n_row = 2
+    n_col = n // 2
+    if n % 2 == 1:
+        n_col += 1
+
+    fig = plt.figure(figsize=(10, 10))
+    grid = ImageGrid(
+        fig,
+        111,  # similar to subplot(111)
+        nrows_ncols=(n_row, n_col),  # creates 2x2 grid of Axes
+        axes_pad=0.01,  # pad between Axes in inch.
+    )
+
+    for ax, f in zip(grid, img_paths):
+        ax.imshow(Image.open(f))
+        ax.axis("off")
+    for ax in grid[len(img_paths):]:
+        ax.axis("off")
+
+    fig.savefig(save_path, bbox_inches="tight", dpi=DPI)
+
+
+def plot_marker_genes(adata: AnnData, obs_key: str, save_path: Path) -> list[str]:
     print("Plotting deg...")
     adata = adata[adata.obs[obs_key].isin(SUB_CLASS_LABELS)]
 
@@ -503,7 +580,6 @@ def plot_marker_genes(adata: AnnData, obs_key: str, save_path: str) -> list[str]
         )
 
     return marker_genes[marker_genes["group"].isin(SUB_CLASS_LABELS)]["names"].tolist()
-    # return df
 
 
 def plot_metrics_simulation(
@@ -588,11 +664,3 @@ def plot_top_enriched_cells(adata: AnnData, img_path: str, save_path) -> None:
             img_path,
             save_path + f"_enriched_predicted_cell_{var}.png",
         )
-
-
-if __name__ == "__main__":
-    tips = sns.load_dataset("tips")
-
-    ax = sns.boxplot(data=tips, x="day", y="total_bill", hue="sex")
-    print_median_labels(ax)
-    plt.show()

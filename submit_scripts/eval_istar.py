@@ -1,7 +1,7 @@
 import submitit
 from pathlib import Path
 from scellst.bench.utils_istar import eval_istar
-from scellst_reproducibility.submit_scripts.script_constants import (
+from sCellST_reproducibility.submit_scripts.script_constants import (
     benchmark_organs,
     visium_slides,
     data_path,

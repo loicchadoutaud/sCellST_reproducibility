@@ -12,6 +12,8 @@ from openslide import OpenSlide
 from pandas import DataFrame, Series
 from tqdm.auto import tqdm
 
+from scellst.metrics.metric_utils import format_metric_df
+from scellst.utils.utils import split_to_dict
 
 logger = logging.getLogger(__name__)
 DPI = 300
@@ -19,55 +21,37 @@ GROUPS = ["connec", "inflam", "neopla"]
 plt.rcParams.update({"font.size": 14})
 
 
-def load_metrics(folder_metric_path: str) -> DataFrame:
-    # Load output metrics
-    metric_paths = [
-        os.path.join(folder_metric_path, f) for f in os.listdir(folder_metric_path)
-    ]
-    df_metrics = [pd.read_csv(path, index_col=0) for path in tqdm(metric_paths)]
-    df_metrics = pd.concat(df_metrics, axis=0, ignore_index=True)
-    df_metrics, hp = add_hp_columns(df_metrics, sep_out=";", sep_in="-")
-    return df_metrics
+def load_metrics(
+    list_metrics_dir: Path | list[Path],
+    metrics_test: list[str],
+    pattern: str | None = None,
+) -> pd.DataFrame:
+    if isinstance(list_metrics_dir, Path):
+        list_metrics_dir = [list_metrics_dir]
+    glob_pattern = f"*{pattern}*" if pattern else "*"
 
+    all_paths = []
+    for metrics_dir in list_metrics_dir:
+        all_paths.extend(list(metrics_dir.glob(glob_pattern)))
+        logger.info(f"Found {len(all_paths)} paths for cellst single slide")
 
-def load_all_metrics(
-    folder_path: str, tag: str, marker_name: str | None = None
-) -> DataFrame:
-    all_metrics = []
-    for object_type in ["spot", "cell"]:
-        if not os.path.exists(os.path.join(folder_path, tag, object_type)):
-            print(f"Skipped {object_type}")
+    dfs = []
+    for path in tqdm(all_paths):
+        if not path.exists():
+            logger.info(f"Path {path} does not exist")
             continue
-        df_metrics = load_metrics(os.path.join(folder_path, tag, object_type))
-        df_metrics = df_metrics.rename(
-            columns={
-                f"pcc_{object_type}": "pcc",
-                f"scc_{object_type}": "scc",
-            }
-        )
-        df_metrics["object_type"] = object_type
+        df = pd.read_csv(path, index_col=0)
+        df["tag"] = path.stem
+        dfs.append(format_metric_df(df, metrics_test))
+    metrics = pd.concat(dfs).reset_index(drop=True)
 
-        all_genes = df_metrics.copy()
-        all_genes["gene_category"] = "hvg"
+    df_hp = pd.DataFrame(metrics["tag"].apply(split_to_dict).to_list())
+    metrics = pd.concat([metrics, df_hp], axis=1)
 
-        if marker_name is not None:
-            print("Load marker genes and add rows to anndata.")
-            marker_genes = pd.read_csv(
-                f"../data/{marker_name}_celltype_markers.csv", index_col=0
-            )
-            marker_genes = marker_genes["names"].unique()
-            df_marker = df_metrics[df_metrics["label_name"].isin(marker_genes)].copy()
-            df_marker["gene_category"] = "marker"
+    return metrics
 
-            all_metrics.append(pd.concat([all_genes, df_marker]))
-        else:
-            all_metrics.append(all_genes)
 
-    df_metrics = pd.concat(all_metrics).reset_index()
-    df_metrics = df_metrics.rename(
-        columns={col: col.replace("_", " ") for col in df_metrics.columns}
-    )
-    return df_metrics
+### Useless after
 
 
 def add_hp_columns(
@@ -97,12 +81,12 @@ def add_hp_columns(
 
 
 def load_cell_adata(file_path: str) -> AnnData:
-    print("Loading cell adata...")
+    logger.info("Loading cell adata...")
     return sc.read_h5ad(file_path)
 
 
 def preprocess_adata(adata: AnnData) -> AnnData:
-    print("Preprocessing cell adata...")
+    logger.info("Preprocessing cell adata...")
     # Filtering
     sc.pp.filter_genes(adata, min_counts=200)
     sc.pp.filter_genes(adata, min_cells=adata.shape[0] // 10)
@@ -128,20 +112,20 @@ def preprocess_adata(adata: AnnData) -> AnnData:
 
 
 def load_slide(file_path: str) -> OpenSlide:
-    print("Loading slide...")
+    logger.info("Loading slide...")
     return OpenSlide(file_path)
 
 
 def load_visium(adata_path: Path) -> AnnData:
     spot_adata = sc.read_h5ad(adata_path)
-    # spot_adata.var_names_make_unique()
-    # spot_adata.obsm["spatial"] = spot_adata.obsm["spatial"].astype("int")
-    # spot_adata.obs["in_tissue"] = spot_adata.obs["in_tissue"].astype("category")
-    # spot_adata = spot_adata[spot_adata.obsm["spatial"][:, 0] >= 0].copy()
+    spot_adata.var_names_make_unique()
+    spot_adata.obsm["spatial"] = spot_adata.obsm["spatial"].astype("int")
+    spot_adata.obs["in_tissue"] = spot_adata.obs["in_tissue"].astype("category")
+    spot_adata = spot_adata[spot_adata.obsm["spatial"][:, 0] >= 0].copy()
     return spot_adata
 
 
-def load_predictions(cell_adata_path: str) -> AnnData:
+def load_predictions(cell_adata_path: str | Path) -> AnnData:
     cell_adata = sc.read_h5ad(cell_adata_path)
     cell_adata.var_names_make_unique()
     cell_adata.obsm["spatial"] = cell_adata.obsm["spatial"] + (
@@ -178,7 +162,7 @@ def crop_gdf(
 
 
 def compute_deg(adata: AnnData, obs_key: str) -> None:
-    print("Computing deg...")
+    logger.info("Computing deg...")
     if adata.obs[obs_key].dtype != "category":
         adata.obs[obs_key] = adata.obs[obs_key].astype("category")
         adata.obs[obs_key] = adata.obs[obs_key].cat.reorder_categories(
@@ -198,7 +182,7 @@ def select_best_lr_model(
     grouped = (
         df[df["genes"] == gene_cat].groupby(columns)[metric].median().reset_index()
     )
-    print(grouped)
+    logger.info(grouped)
     best_lr_per_model = grouped.loc[grouped.groupby(columns[0])[metric].idxmax()]
     return pd.merge(df, best_lr_per_model[columns], on=columns)
 

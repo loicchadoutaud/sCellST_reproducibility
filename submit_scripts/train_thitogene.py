@@ -3,7 +3,7 @@ from sklearn.model_selection import ParameterGrid
 from scellst.bench.utils_thitogene import train_thitogene
 import submitit
 
-from scellst_reproducibility.submit_scripts.script_constants import (
+from sCellST_reproducibility.submit_scripts.script_constants import (
     benchmark_organs,
     visium_slides,
     benchmark_genes,

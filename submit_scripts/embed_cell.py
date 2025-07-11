@@ -1,38 +1,44 @@
 import submitit
+
+from sCellST_reproducibility.submit_scripts.utils import get_executor_cbio
 from scellst.submit_function import embed_cells
-from scellst_reproducibility.submit_scripts.script_constants import (
+from sCellST_reproducibility.submit_scripts.script_constants import (
     visium_slides,
     benchmark_organs,
     xenium_slides,
     data_path,
-    log_dir,
+    log_dir, xenium_slides_review,
 )
 
 if __name__ == "__main__":
     # Initialize submitit executor
-    executor = submitit.AutoExecutor(folder=log_dir)
-    executor.update_parameters(
-        slurm_array_parallelism=6,
-        slurm_partition="cbio-gpu",  # Use specified partition
-        mem_gb=64,  # Set memory to 64GB
-        gpus_per_node=1,  # Request 1 GPU
-        cpus_per_task=4,
-        name="embed_cell",
-        timeout_min=2880,
-        slurm_exclude="node005,node006",
-    )
+    executor = get_executor_cbio(use_gpu=True, job_name="embed_cell")
 
     # Submit jobs for each organ
     with executor.batch():
-        for organ in benchmark_organs:
-            executor.submit(
-                embed_cells,
-                data_path,
-                organ=None,
-                ids_to_query=visium_slides[organ],
-                tag=f"moco-{organ}-rn50",
-                model_name="resnet50",
-            )
+        # # Baseline embeddings (wait for this to finish to launch the rest)
+        # for organ in benchmark_organs:
+        #     executor.submit(
+        #         embed_cells,
+        #         data_path,
+        #         organ=None,
+        #         ids_to_query=visium_slides[organ],
+        #         tag=f"imagenet-rn50",
+        #         model_name="resnet50",
+        #         normalisation_type="train",
+        #     )
+        #
+        # # Moco embeddings
+        # for organ in benchmark_organs:
+        #     executor.submit(
+        #         embed_cells,
+        #         data_path,
+        #         organ=None,
+        #         ids_to_query=visium_slides[organ],
+        #         tag=f"moco-{organ}-rn50",
+        #         model_name="resnet50",
+        #         normalisation_type="train",
+        #     )
 
         executor.submit(
             embed_cells,

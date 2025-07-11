@@ -1,7 +1,7 @@
 import submitit
 from pathlib import Path
 from scellst.bench.utils_histogene import eval_histogene
-from scellst_reproducibility.submit_scripts.script_constants import (
+from sCellST_reproducibility.submit_scripts.script_constants import (
     benchmark_organs,
     visium_slides,
     data_path,
