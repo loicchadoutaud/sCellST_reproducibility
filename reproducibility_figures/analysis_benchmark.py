@@ -6,6 +6,7 @@ from pathlib import Path
 from loguru import logger
 
 from sCellST_reproducibility.reproducibility_figures.utils_analyses import load_metrics
+from sCellST_reproducibility.reproducibility_figures.utils_table import source_data
 from scellst.constant import METRICS_DIR
 from sCellST_reproducibility.submit_scripts.script_constants import visium_slides
 
@@ -29,7 +30,7 @@ def enrich_and_format(metrics: DataFrame) -> DataFrame:
     return metrics
 
 
-def plot_benchmark(metrics: DataFrame, save_path: Path) -> None:
+def plot_benchmark(metrics: DataFrame, save_path: Path, table_save_path: Path, ext: str = "svg") -> None:
     palette = sns.color_palette("magma", n_colors=5)
     palette = {
         model: color
@@ -73,7 +74,15 @@ def plot_benchmark(metrics: DataFrame, save_path: Path) -> None:
                 fontsize=20,
                 title_fontsize=22,
             )
-            sns.despine(fig)
+
+            # Save source data
+            src_df = source_data(
+                df=df_plot,
+                x="genes",
+                hue="model",
+                y=metric,
+            )
+            src_df.to_csv(table_save_path / f"ss_{organ}_{metric}.csv")
 
             # Multi slide
             df_plot = metrics[
@@ -101,21 +110,29 @@ def plot_benchmark(metrics: DataFrame, save_path: Path) -> None:
             axes[1].tick_params(axis="x", labelsize=16)
             axes[1].tick_params(axis="y", labelsize=16)
             axes[1].set_ylim(0, None)
-            sns.despine(fig)
 
+            # Save source data
+            src_df = source_data(
+                df=df_plot,
+                x="genes",
+                hue="model",
+                y=metric,
+            )
+            src_df.to_csv(table_save_path / f"ms_{organ}_{metric}.csv")
+
+            sns.despine(fig)
             fig.suptitle(f"{organ} - {metric}", fontsize=24, fontweight="bold")
-            fig.savefig(save_path / f"{organ}_{metric}.png", bbox_inches="tight")
+            fig.savefig(save_path / f"{organ}_{metric}.{ext}", bbox_inches="tight")
             plt.close(fig)
 
 
-def generate_thumbnails() -> None:
+def generate_thumbnails(ext: str = "svg") -> None:
     target_size = (500, 500)
+    thumbnail_path = Path("/home/loic/Data/raw_hest/thumbnails")
     for organ, slides in visium_slides.items():
         images = []
         for slide in slides:
-            img_path = Path(
-                f"../../hest_data/thumbnails/{slide}_downscaled_fullres.jpeg"
-            )
+            img_path = thumbnail_path / f"{slide}_downscaled_fullres.jpeg"
             if not img_path.exists():
                 logger.info(f"Missing image for {slide}")
                 continue
@@ -136,7 +153,7 @@ def generate_thumbnails() -> None:
             ax.grid(False)
 
         fig.suptitle(f"{organ} dataset", fontsize=30, fontweight="bold", y=1.05)
-        fig.savefig(save_path / f"{organ}_thumbnails.png", bbox_inches="tight")
+        fig.savefig(save_path / f"{organ}_thumbnails.{ext}", bbox_inches="tight")
         plt.close(fig)
 
 
@@ -151,14 +168,17 @@ if __name__ == "__main__":
 
     # Output path
     save_path = Path("figures/benchmark")
+    table_save_path = Path("tables/benchmark")
     save_path.mkdir(parents=True, exist_ok=True)
+    table_save_path.mkdir(parents=True, exist_ok=True)
 
+    # Plots
     logger.info("Loading metrics...")
     metrics = load_metrics(list_metrics_dir, metrics_test=metrics_test)
     logger.info("Formatting metrics...")
     metrics = enrich_and_format(metrics)
     logger.info("Plotting benchmark figures...")
-    plot_benchmark(metrics, save_path)
+    plot_benchmark(metrics, save_path, table_save_path)
     logger.info("Generating thumbnails...")
     generate_thumbnails()
     logger.info("Done.")

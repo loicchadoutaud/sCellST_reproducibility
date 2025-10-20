@@ -22,12 +22,14 @@ from sklearn.preprocessing import MinMaxScaler
 from statannotations.Annotator import Annotator
 from tqdm.auto import tqdm
 
+from sCellST_reproducibility.reproducibility_figures.utils_table import source_data
 from scellst.constant import (
     SUB_CLASS_LABELS,
     COLOR_MAP,
     GENE_2_CELLTYPE,
     GROUP_2_CELLTYPE,
 )
+from scellst.plots.plot_spatial import _rasterize_points_in_axes
 
 DPI = 300
 
@@ -48,6 +50,8 @@ def plot_he(adata: AnnData, title: str, save_path: Path, obs_color: str = None) 
         show=False,
         ax=ax,
     )
+    _rasterize_points_in_axes(ax, rasterize=True)
+
     ax.set_title(title)
     ax.set_axis_off()
     if ax.get_legend() is not None:
@@ -366,7 +370,7 @@ def plot_xenium_list_gene_image(
 
 
 def plot_signature_score(
-    adata: AnnData, obs_key: str, list_scores: list[str], save_path: Path, add_stat_test: bool = False,
+    adata: AnnData, obs_key: str, list_scores: list[str], save_path: Path, table_save_path: Path, add_stat_test: bool = False,
 ) -> None:
     # Prepare data
     adata = adata[adata.obs[obs_key].isin(SUB_CLASS_LABELS)]
@@ -391,6 +395,15 @@ def plot_signature_score(
     ax.set_title("Distribution of different cell type score.")
     sns.move_legend(ax, "upper left", bbox_to_anchor=(1, 1))
     sns.despine(fig)
+
+    # Save source data
+    src_df = source_data(
+        df=df_plot,
+        x="group",
+        y="min-max scaled score",
+        hue="class",
+    )
+    src_df.to_csv(table_save_path)
 
     # Add statistical significance
     if add_stat_test:
@@ -431,7 +444,7 @@ def plot_corr_score(adata: AnnData, list_scores: list[str], save_path: Path) -> 
 
 
 def plot_top_genes_2(
-    adata: AnnData, hue: str, list_scores: list[str], save_path, add_stat_test: bool = False
+    adata: AnnData, hue: str, list_scores: list[str], save_path: Path, table_save_path: Path, add_stat_test: bool = False, ext: str = "svg"
 ) -> None:
     palette = COLOR_MAP if hue == "class" else None
 
@@ -469,8 +482,17 @@ def plot_top_genes_2(
         annot.apply_test()
         annot.annotate()
 
+    # Save source data
+    src_df = source_data(
+        df=df,
+        x="gene",
+        y="expression",
+        hue=hue,
+    )
+    src_df.to_csv(os.path.join(table_save_path, "gene_distribution_boxplot.csv"))
+
     fig.savefig(
-        os.path.join(save_path, f"gene_distribution_boxplot.png"),
+        os.path.join(save_path, f"gene_distribution_boxplot.{ext}"),
         bbox_inches="tight",
         dpi=DPI,
     )
@@ -517,10 +539,11 @@ def plot_full_gallery(
     img_dir: Path,
     list_score_to_plot: list[str],
     save_path: Path,
+    ext: str
 ) -> None:
     if save_path.exists():
         os.remove(save_path)
-    img_paths = [img_dir / f"gallery_{s}.png" for s in list_score_to_plot]
+    img_paths = [img_dir / f"gallery_{s}.{ext}" for s in list_score_to_plot]
     n = len(img_paths)
     n_row = 2
     n_col = n // 2
@@ -544,7 +567,7 @@ def plot_full_gallery(
     fig.savefig(save_path, bbox_inches="tight", dpi=DPI)
 
 
-def plot_marker_genes(adata: AnnData, obs_key: str, save_path: Path) -> list[str]:
+def plot_marker_genes(adata: AnnData, obs_key: str, save_path: Path, ext: str = "svg") -> list[str]:
     print("Plotting deg...")
     adata = adata[adata.obs[obs_key].isin(SUB_CLASS_LABELS)]
 
@@ -576,7 +599,7 @@ def plot_marker_genes(adata: AnnData, obs_key: str, save_path: Path) -> list[str
             return_fig=True,
         )
         fig.savefig(
-            os.path.join(save_path, "mean_dotplots.png"), bbox_inches="tight", dpi=DPI
+            os.path.join(save_path, f"mean_dotplots.{ext}"), bbox_inches="tight", dpi=DPI
         )
 
     return marker_genes[marker_genes["group"].isin(SUB_CLASS_LABELS)]["names"].tolist()
@@ -588,6 +611,7 @@ def plot_metrics_simulation(
     y: str,
     title: str,
     save_path: Path,
+    table_save_path: Path,
     hue: str,
     x_order: list[str] | None = None,
     hue_order: list[str] | None = None,
@@ -634,6 +658,15 @@ def plot_metrics_simulation(
     axes.set_xlabel("")
     axes.set_title(title)
     sns.move_legend(axes, "upper left", bbox_to_anchor=(1, 1))
+
+    # Save source data
+    src_df = source_data(
+        df=df_metrics,
+        x=x,
+        hue=hue,
+        y=y,
+    )
+    src_df.to_csv(table_save_path)
 
     # Save figure
     sns.despine()

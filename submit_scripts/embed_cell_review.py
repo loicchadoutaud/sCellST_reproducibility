@@ -1,7 +1,7 @@
 from sCellST_reproducibility.submit_scripts.utils import get_executor_cbio
 from scellst.submit_function import embed_cells
 from sCellST_reproducibility.submit_scripts.script_constants import (
-    data_path, xenium_slides_review, test_slide,
+    data_path,  test_slide,
 )
 
 if __name__ == "__main__":

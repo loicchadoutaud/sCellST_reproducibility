@@ -1,17 +1,12 @@
 import submitit
-from pathlib import Path
 
 from scellst.constant import PROJ_ROOT
 from scellst.predict import predict_and_save
 from sCellST_reproducibility.submit_scripts.script_constants import (
-    benchmark_organs,
     visium_slides,
-    xenium_slides,
     log_dir,
     data_path,
-    xenium_slides_review,
-    test_slide,
-)
+    )
 
 # === Configuration ===
 all_config_dir = PROJ_ROOT / "models" / "mil"

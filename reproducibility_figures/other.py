@@ -3,10 +3,14 @@ from PIL import Image
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import ImageGrid
 import pandas as pd
+import scanpy as sc
 from hest import load_wsi
+from sCellST_reproducibility.reproducibility_figures.utils_analyses import load_visium, preprocess_adata
+from scellst.constant import DATA_DIR
+from scellst.plots.plot_spatial import _rasterize_points_in_axes
 
 
-def plot_ffpe_vs_frozen(ffpe_path: str, frozen_path: str, output_dir: Path):
+def plot_ffpe_vs_frozen(ffpe_path: str, frozen_path: str, output_dir: Path, ext: str = "pdf"):
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Load FFPE
@@ -31,7 +35,7 @@ def plot_ffpe_vs_frozen(ffpe_path: str, frozen_path: str, output_dir: Path):
     axes[1].axis("off")
     axes[1].set_title("Crop of Frozen slide")
 
-    fig.savefig(output_dir / "ffpe_frozen_comp.png", dpi=300, bbox_inches="tight")
+    fig.savefig(output_dir / f"ffpe_frozen_comp.{ext}", dpi=300, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -49,6 +53,37 @@ def plot_kidney_cell_counts(figure_folder: Path, slide_names: list[str], img_tag
     fig.suptitle("Number of detected cells in spots for FFPE Kidney dataset", fontsize=20, y=0.92)
     fig.savefig(output_path, dpi=280, bbox_inches="tight")
     plt.close(fig)
+
+
+def plot_plasma_marker(data_dir: Path, slide_id: str, organ: str, group: str, output_path: Path):
+    # Paths
+    spot_adata_path = data_dir / "st" / f"{slide_id}.h5ad"
+    df_marker_path = DATA_DIR / f"genes_marker_{organ}.csv"
+
+    # Load data
+    spot_adata = load_visium(spot_adata_path)
+    spot_adata = preprocess_adata(spot_adata)
+    df_marker = pd.read_csv(df_marker_path, index_col=0)
+    list_genes = df_marker.loc[df_marker["group"].eq(group), "gene"].to_list()
+    list_genes = [g for g in list_genes if g in spot_adata.var_names]
+
+    # Make plots
+    fig = sc.pl.spatial(
+        spot_adata,
+        color=list_genes,
+        img_key="downscaled_fullres",
+        cmap="magma",
+        ncols=5,
+        show=False,
+        return_fig=True,
+    )
+
+    # rasterize only the scatter artists (keeps text/axes vector in SVG/PDF)
+    for ax in fig.axes:
+        for coll in getattr(ax, "collections", []):
+            coll.set_rasterized(True)
+
+    fig.savefig(output_path, dpi=150, bbox_inches="tight")
 
 
 def create_marker_gene_table(
@@ -100,7 +135,9 @@ def create_marker_gene_table(
 
 
 if __name__ == "__main__":
-    output_folder = Path("figures/sup")
+    data_dir = Path("/home/loic/Data/raw_hest")
+    save_dir = Path("figures/sup")
+    table_dave_dir = Path("tables/sup")
 
     # # Compare FFPE vs Frozen
     # plot_ffpe_vs_frozen(
@@ -109,20 +146,30 @@ if __name__ == "__main__":
     #     output_dir=output_folder,
     # )
     #
-    # Kidney dataset plots
-    kidney_slide_names = [f"INT{i}" for i in range(13, 25)]
-    plot_kidney_cell_counts(
-        figure_folder=Path("../../hest_data/cell_plots"),
-        slide_names=kidney_slide_names,
-        img_tag="cellvit_spot_cell_count",
-        output_path=output_folder / "spot_cell_counts.png",
+    # # Kidney dataset plots
+    # kidney_slide_names = [f"INT{i}" for i in range(13, 25)]
+    # plot_kidney_cell_counts(
+    #     figure_folder=Path("../../hest_data/cell_plots"),
+    #     slide_names=kidney_slide_names,
+    #     img_tag="cellvit_spot_cell_count",
+    #     output_path=output_folder / "spot_cell_counts.pdf",
+    # )
+    # plot_kidney_cell_counts(
+    #     figure_folder=Path("../../hest_data/cell_plots"),
+    #     slide_names=kidney_slide_names,
+    #     img_tag="cellvit_hist_cell_count",
+    #     output_path=output_folder / "hist_cell_counts.pdf",
+    # )
+
+    # Plasmablast marker
+    plot_plasma_marker(
+        data_dir=data_dir,
+        slide_id="TENX39",
+        organ="breast",
+        group="Plasmablasts",
+        output_path=save_dir / "plasma_marker.svg",
     )
-    plot_kidney_cell_counts(
-        figure_folder=Path("../../hest_data/cell_plots"),
-        slide_names=kidney_slide_names,
-        img_tag="cellvit_hist_cell_count",
-        output_path=output_folder / "hist_cell_counts.png",
-    )
+
     #
     # # Tables
     # _ = create_marker_gene_table(

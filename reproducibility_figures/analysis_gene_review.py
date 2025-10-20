@@ -6,6 +6,7 @@ import seaborn as sns
 from matplotlib import pyplot as plt
 
 from sCellST_reproducibility.reproducibility_figures.utils_analyses import load_metrics
+from sCellST_reproducibility.reproducibility_figures.utils_table import source_data
 from scellst.constant import METRICS_DIR, DATA_DIR
 
 
@@ -27,7 +28,7 @@ def preprocess_metrics(metrics: pd.DataFrame) -> pd.DataFrame:
     return metrics
 
 
-def plot_gene_pcc_distribution(metrics: pd.DataFrame, save_path: Path, gene_order: list[str]):
+def plot_gene_pcc_distribution(metrics: pd.DataFrame, gene_order: list[str], save_path: Path, table_save_path: Path, ext: str = "svg") -> None:
     min_val, max_val, binwidth = -0.2, 0.8, 0.1
     fig, axes = plt.subplots(1, 3, figsize=(28, 6))
 
@@ -59,27 +60,48 @@ def plot_gene_pcc_distribution(metrics: pd.DataFrame, save_path: Path, gene_orde
     axes[2].yaxis.label.set_size(18)
     axes[2].set_title("Mean PCC for multiple numbers of training genes", fontsize=18)
 
+    # Save source data
+    src_df = source_data(
+        df=metrics,
+        x="genes",
+        y="pcc",
+    )
+    src_df.to_csv(table_save_path / "pcc_hvg.csv")
+
     sns.despine()
-    fig.savefig(save_path / "gene_pcc_distribution.png", dpi=100, bbox_inches="tight")
+    fig.savefig(save_path / f"gene_pcc_distribution.{ext}", dpi=100, bbox_inches="tight")
 
 
-def plot_top_50_hvg(metrics: pd.DataFrame, save_path: Path, gene_order: list[str]):
-    top_50_hvg = metrics[metrics["genes"] == "50 HVG"]["gene"].unique()
-    top_metrics = metrics[metrics["gene"].isin(top_50_hvg)]
+def plot_top_50_hvg(metrics: pd.DataFrame, gene_order: list[str], save_path: Path, table_save_path: Path, ext: str = "svg"):
+    n_cats = metrics["genes"].nunique()
+    common_genes = metrics.groupby("gene")["genes"].nunique().pipe(lambda s: s[s == n_cats]).index
+    top_metrics = metrics[metrics["gene"].isin(common_genes)]
 
+    # Figure
     fig, ax = plt.subplots(figsize=(8, 6))
     sns.barplot(
         data=top_metrics, x="genes", y="pcc", hue="genes",
         palette="viridis", order=gene_order, hue_order=gene_order, ax=ax
     )
-    ax.set_title("Mean PCC of top 50 HVG for different training gene sets.", fontsize=18)
+    ax.set_title("Mean PCC of top HVG for different training gene sets.", fontsize=18)
     ax.xaxis.label.set_size(18)
     ax.yaxis.label.set_size(18)
     sns.despine()
-    fig.savefig(save_path / "gene_pcc_top_50_hvg.png", dpi=100, bbox_inches="tight")
+    fig.savefig(save_path / f"gene_pcc_top_hvg.{ext}", dpi=100, bbox_inches="tight")
+
+    # Save source data
+    src_df = source_data(
+        df=top_metrics,
+        x="genes",
+        y="pcc",
+        hue="genes",
+    )
+    src_df.to_csv(table_save_path / "gene_pcc_top_hvg.csv")
 
 
-def plot_rank_vs_metrics(metrics: pd.DataFrame, save_path: Path, rank_file: Path):
+
+
+def plot_rank_vs_metrics(metrics: pd.DataFrame, rank_file: Path, save_path: Path, table_save_path: Path, ext: str = "svg"):
     top_2000 = metrics[metrics["genes"] == "2000 HVG"].groupby("gene")[["pcc", "scc"]].mean()
     gene_rank = pd.read_csv(rank_file, index_col=0)
     merged = top_2000.merge(gene_rank, left_on="gene", right_on="gene", how="left")
@@ -89,8 +111,17 @@ def plot_rank_vs_metrics(metrics: pd.DataFrame, save_path: Path, rank_file: Path
     ax.xaxis.label.set_size(18)
     ax.yaxis.label.set_size(18)
     ax.set_title("Comparison between prediction performances and HVG ranks", fontsize=18)
+
+    # Save source data
+    src_df = source_data(
+        df=merged,
+        x="highly_variable_rank",
+        y="pcc",
+    )
+    src_df.to_csv(table_save_path / "comparison_rank_metrics.csv")
+
     sns.despine()
-    fig.savefig(save_path / "comparison_rank_metrics.png", dpi=100, bbox_inches="tight")
+    fig.savefig(save_path / f"comparison_rank_metrics.{ext}", dpi=100, bbox_inches="tight")
 
 
 def run_gene_analysis():
@@ -99,14 +130,16 @@ def run_gene_analysis():
     gene_order = ["50 HVG", "200 HVG", "500 HVG", "1000 HVG", "2000 HVG"]
     save_path = Path("figures") / exp_tag
     save_path.mkdir(exist_ok=True, parents=True)
+    table_save_path = Path("tables") / exp_tag
+    table_save_path.mkdir(exist_ok=True, parents=True)
 
     metrics_dir = METRICS_DIR / exp_tag / "mil"
     metrics = load_metrics(metrics_dir, metrics_test)
     metrics = preprocess_metrics(metrics)
 
-    plot_gene_pcc_distribution(metrics, save_path, gene_order)
-    plot_top_50_hvg(metrics, save_path, gene_order)
-    plot_rank_vs_metrics(metrics, save_path, DATA_DIR / "genes_Prostate_2000_hvg_bench.csv")
+    plot_gene_pcc_distribution(metrics, gene_order, save_path, table_save_path)
+    plot_top_50_hvg(metrics, gene_order, save_path, table_save_path)
+    plot_rank_vs_metrics(metrics, DATA_DIR / "genes_Prostate_2000_hvg_bench.csv", save_path, table_save_path, )
 
 
 if __name__ == "__main__":

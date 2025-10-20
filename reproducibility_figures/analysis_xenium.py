@@ -6,6 +6,7 @@ import seaborn as sns
 from anndata import AnnData
 from loguru import logger
 
+from sCellST_reproducibility.reproducibility_figures.utils_table import source_data
 from scellst.constant import PREDS_DIR, METRICS_DIR
 from scellst.dataset.data_handler import XeniumHandler
 from scellst.plots.plot_spatial import plot_top_genes
@@ -50,6 +51,7 @@ def plot_xenium_exp(
     list_genes: list[str],
     shape_name: str,
     save_path: Path,
+    ext: str = "svg",
 ) -> AnnData:
 
     slide_dir = save_path / slide_id
@@ -86,15 +88,15 @@ def plot_xenium_exp(
         cell_adata_pred = crop_image(cell_adata_pred, 2500, 53738, 400, 47000)
 
     plot_he(
-        cell_adata, title=f"{slide_id} H&E", save_path=slide_dir / f"he_{slide_id}.png"
+        cell_adata, title=f"{slide_id} H&E", save_path=slide_dir / f"he_{slide_id}.{ext}"
     )
-    plot_top_genes(cell_adata, cell_adata_pred, list_genes, slide_dir / f"gene_exp.png")
+    plot_top_genes(cell_adata, cell_adata_pred, list_genes, slide_dir / f"gene_exp.{ext}")
 
     return cell_adata
 
 
 def plot_metrics(
-    metrics: pd.DataFrame, save_path: Path, metrics_test: list[str]
+    metrics: pd.DataFrame, save_path: Path, table_save_path: Path, metrics_test: list[str], ext: str = "svg"
 ):
     for metric in metrics_test:
         logger.info(metrics.groupby("test slide")[metric].median())
@@ -107,8 +109,18 @@ def plot_metrics(
         ax.set_title(f"SVG {metric}")
         ax.axhline(y=0, color="gray", linestyle="--", linewidth=2)
         sns.despine()
+
+        # Save source data
+        src_df = source_data(
+            df=metrics,
+            x="test slide",
+            y=metric,
+            hue="test slide",
+        )
+        src_df.to_csv(table_save_path / f"{metric}_distribution.csv")
+
         fig.savefig(
-            save_path / f"{metric}_distribution.png", bbox_inches="tight", dpi=150
+            save_path / f"{metric}_distribution.{ext}", bbox_inches="tight", dpi=150
         )
         plt.close(fig)
 
@@ -125,26 +137,27 @@ def save_metrics(
 
 
 def run_xenium_analysis():
-    data_dir = Path("../../hest_data")
+    data_dir = Path("/home/loic/Data/raw_hest")
     save_path = Path("figures/xenium")
     save_path.mkdir(parents=True, exist_ok=True)
+    table_save_path = Path("tables/xenium")
+    table_save_path.mkdir(parents=True, exist_ok=True)
     metrics_test = ["pcc", "scc"]
 
-    # Single slide plots
-    shape_name = "xenium_nucleus"
-    xenium_slides = {
-        "NCBI785": ["KRT8", "PTPRC"],
-        "TENX95": ["EPCAM", "CD3E"],
-    }
-    for slide_id, genes in xenium_slides.items():
-        plot_xenium_exp(data_dir, slide_id, genes, shape_name, save_path)
+    # # Single slide plots
+    # shape_name = "xenium_nucleus"
+    # xenium_slides = {
+    #     "NCBI785": ["KRT8", "PTPRC"],
+    #     "TENX95": ["EPCAM", "CD3E"],
+    # }
+    # for slide_id, genes in xenium_slides.items():
+    #     plot_xenium_exp(data_dir, slide_id, genes, shape_name, save_path)
 
     # Multiple slide experiments
     metrics_dir = METRICS_DIR / "xenium" / "xenium"
     metrics_df = load_metrics(metrics_dir, metrics_test)
     metrics_df = metrics_df.rename(columns={"test_slide": "test slide"})
-    logger.info(metrics_df[["pcc", "scc"]].mean())
-    plot_metrics(metrics_df, save_path, metrics_test)
+    plot_metrics(metrics_df, save_path, table_save_path, metrics_test)
     save_metrics(metrics_df, save_path)
 
 

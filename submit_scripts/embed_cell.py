@@ -1,14 +1,11 @@
-import submitit
+
 
 from sCellST_reproducibility.submit_scripts.utils import get_executor_cbio
 from scellst.submit_function import embed_cells
 from sCellST_reproducibility.submit_scripts.script_constants import (
-    visium_slides,
-    benchmark_organs,
     xenium_slides,
     data_path,
-    log_dir, xenium_slides_review,
-)
+    )
 
 if __name__ == "__main__":
     # Initialize submitit executor

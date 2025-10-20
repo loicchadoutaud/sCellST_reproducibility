@@ -4,7 +4,7 @@ import pandas as pd
 from openslide import OpenSlide
 from loguru import logger
 
-from scellst.constant import PREDS_DIR
+from scellst.constant import PREDS_DIR, DATA_DIR
 from sCellST_reproducibility.reproducibility_figures.utils_analyses import (
     compute_signature_scores,
     load_predictions,
@@ -21,6 +21,7 @@ def run_marker_visualization(
     organ: str,
     data_dir: Path,
     save_path: Path,
+    table_save_path: Path,
     embedding_tag: str = "moco",
     model_tag: str = "mil",
     shape_name: str | None = None,
@@ -29,6 +30,7 @@ def run_marker_visualization(
     include_signature_score: bool = True,
     include_gallery: bool = True,
     extra_gallery_spec: list[dict] | None = None,
+    ext: str = "svg"
 ) -> None:
     """
     Generate marker score plots and galleries for a given slide.
@@ -47,10 +49,11 @@ def run_marker_visualization(
     - extra_gallery_spec: list of dictionaries with keys: 'class_value', 'score_group', 'title'
     """
     save_path.mkdir(parents=True, exist_ok=True)
+    table_save_path.mkdir(parents=True, exist_ok=True)
 
     # Construct input paths
     wsi_path = data_dir / "wsis" / f"{slide_id}.tif"
-    df_marker_path = data_dir.parent / "data" / f"genes_marker_{organ}.csv"
+    df_marker_path = DATA_DIR / f"genes_marker_{organ}.csv"
 
     # Build prediction path
     components = [
@@ -99,26 +102,25 @@ def run_marker_visualization(
             cell_adata,
             obs_key="class",
             list_scores=list_score_to_plot,
-            save_path=save_path / "gene_score.png",
+            save_path=save_path / f"gene_score.{ext}",
+            table_save_path=table_save_path / "gene_score.csv",
             add_stat_test=False,
         )
     plot_corr_score(
         cell_adata,
         list_scores=list_score_to_plot,
-        save_path=save_path / "gene_corr.png",
+        save_path=save_path / f"gene_corr.{ext}",
     )
 
     if include_gallery:
-        list_gallery_to_plot = [g for g in list_gallery_to_plot if g in df_marker["group"].unique()]
         for grp in list_gallery_to_plot:
             logger.info(f"Plotting gallery for {grp}")
             plot_gene_gallery(
                 cell_adata,
                 color=grp,
                 wsi=wsi,
-                save_path=save_path / f"gallery_{grp}",
+                save_path=save_path / f"gallery_{grp}.{ext}",
             )
-        plot_full_gallery(img_dir=save_path, list_score_to_plot=list_gallery_to_plot, save_path=save_path / f"full_gallery")
 
     if extra_gallery_spec:
         for spec in extra_gallery_spec:
@@ -127,7 +129,7 @@ def run_marker_visualization(
             title = spec.get("title", f"{score_group} classified as {class_val}")
             subset = cell_adata[cell_adata.obs["class"] == class_val]
             out_path = (
-                save_path / f"gallery_{score_group}_classified_as_{class_val}"
+                save_path / f"gallery_{score_group}_classified_as_{class_val}.{ext}"
             )
             logger.info(f"Plotting subset gallery: {title}")
             plot_gene_gallery(
@@ -140,8 +142,9 @@ def run_marker_visualization(
 
 
 if __name__ == '__main__':
-    data_dir = Path("../../hest_data")
+    data_dir = Path("/home/loic/Data/raw_hest")
     save_dir = Path("figures")
+    table_dave_dir = Path("tables")
 
     # slide_id = "TENX65"
     # run_marker_visualization(
@@ -149,6 +152,7 @@ if __name__ == '__main__':
     #     organ="ovary",
     #     data_dir=data_dir,
     #     save_path=save_dir / f"marker_{slide_id}",
+    #     table_save_path=table_dave_dir / f"marker_{slide_id}",
     #     embedding_tag=f"moco-{slide_id}-rn50_train",
     #     shape_name="cellvit",
     #     list_score_to_plot=[
@@ -169,13 +173,14 @@ if __name__ == '__main__':
     #         {"class_value": "Neoplastic", "score_group": "plasma cell"},
     #     ],
     # )
-
+    #
     # slide_id = "TENX65"
     # run_marker_visualization(
     #     slide_id=slide_id,
     #     organ="ovary",
     #     data_dir=data_dir,
     #     save_path=save_dir / f"marker_{slide_id}_imagenet",
+    #     table_save_path=table_dave_dir / f"marker_{slide_id}_imagenet",
     #     embedding_tag=f"imagenet-rn50_train",
     #     shape_name="cellvit",
     #     list_score_to_plot=[
@@ -192,6 +197,7 @@ if __name__ == '__main__':
     #     organ="ovary",
     #     data_dir=data_dir,
     #     save_path=save_dir / f"marker_{slide_id}_hoverfast",
+    #     table_save_path=table_dave_dir / f"marker_{slide_id}_hoverfast",
     #     embedding_tag=f"moco-{slide_id}-rn50_train",
     #     shape_name="hoverfast",
     #     list_score_to_plot=[
@@ -202,13 +208,14 @@ if __name__ == '__main__':
     #     ],
     #     include_signature_score=False,
     # )
-    #
+
     slide_id = "TENX39"
     run_marker_visualization(
         slide_id=slide_id,
         organ="breast",
         data_dir=data_dir,
         save_path=save_dir / f"marker_{slide_id}",
+        table_save_path=table_dave_dir / f"marker_{slide_id}",
         embedding_tag=f"moco-{slide_id}-rn50_train",
         list_gallery_to_plot=['B-cells', 'CAFs', 'Cancer Epithelial', 'Endothelial', 'Myeloid', 'Normal Epithelial', 'PVL', 'Plasmablasts', 'T-cells', 'JCHAIN'],
         shape_name="cellvit",

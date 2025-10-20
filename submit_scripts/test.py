@@ -1,4 +1,4 @@
-from sklearn.model_selection import ParameterGrid
+
 
 from sCellST_reproducibility.submit_scripts.utils import get_executor_cbio
 from scellst.constant import PROJ_ROOT
@@ -7,8 +7,7 @@ from scellst.submit_function import embed_cells, download_data
 from sCellST_reproducibility.submit_scripts.script_constants import (
     data_path,
     xenium_slides_review,
-    test_slide,
-)
+    )
 from scellst.train import train_and_save
 
 

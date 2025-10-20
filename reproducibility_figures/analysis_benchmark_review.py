@@ -5,6 +5,7 @@ from pathlib import Path
 from loguru import logger
 
 from sCellST_reproducibility.reproducibility_figures.utils_analyses import load_metrics
+from sCellST_reproducibility.reproducibility_figures.utils_table import source_data
 from scellst.constant import METRICS_DIR
 
 
@@ -30,14 +31,8 @@ def enrich_and_format(metrics: DataFrame) -> DataFrame:
 
 
 def plot_barplot(
-    metrics: DataFrame, x: str, y: str, hue: str, title: str, save_path: Path
+    df: DataFrame, x: str, y: str, hue: str, title: str, save_path: Path
 ) -> None:
-    # Select test slides
-    df = metrics
-    df["test_slide_fold"] = df.groupby("organ")["test_slide"].transform(
-        lambda x: x.factorize(sort=True)[0]
-    )
-    df = df[(df["test_slide_fold"] == df["fold"].astype(int))]
     logger.info(df.groupby(hue)[y].mean())
     logger.info(df.groupby(hue).size())
     fig, ax = plt.subplots(figsize=(5, 4))
@@ -54,7 +49,7 @@ def plot_barplot(
     fig.savefig(save_path, bbox_inches="tight")
 
 
-def plot_benchmark(metrics: DataFrame) -> None:
+def plot_benchmark(metrics: DataFrame, metrics_test:  list[str], ext: str = "svg") -> None:
     palette = sns.color_palette("magma", n_colors=5)
     palette = {model: color for model, color in zip(
         ["HisToGene", "THItoGene", "istar", "MclSTExp", "sCellST"], palette)}
@@ -84,16 +79,56 @@ def plot_benchmark(metrics: DataFrame) -> None:
         ax.set_ylabel("")
         ax.set_title(f"{metric}", fontsize=20)
         ax.tick_params(axis='x', labelrotation=30)
+
+        # Save source data
+        src_df = source_data(
+            df=df_plot,
+            x="model",
+            y=metric,
+            hue="model",
+        )
+        src_df.to_csv(TABLE_SAVE_PATH / f"{metric}_barplot.csv")
+
     fig.suptitle(f"Metrics on multiple slide training {organ} with {genes}", y=1.02, fontsize=24, fontweight="bold")
     sns.despine()
-    fig.savefig(str(save_path / f"{organ}-{genes}-metrics.png"), bbox_inches="tight")
+    fig.savefig(str(SAVE_PATH / f"{organ}-{genes}-metrics.{ext}"), bbox_inches="tight")
 
 
 if __name__ == "__main__":
+    # Context
+    sns.set_context("paper")
+
+    # Paths
+    SAVE_PATH = Path("figures/review-benchmark")
+    TABLE_SAVE_PATH = Path("tables/review-benchmark")
+    SAVE_PATH.mkdir(parents=True, exist_ok=True)
+    TABLE_SAVE_PATH.mkdir(parents=True, exist_ok=True)
+
+    ### Full benchmark
+    # Metrics
+    metrics_test = ["pcc", "scc", "mae", "rmse"]
+    list_models = ["istar", "HisToGene", "MclSTExp", "THItoGene"]
+    list_metrics_dir = [METRICS_DIR / model for model in list_models] + [
+        METRICS_DIR / "benchmark" / "mil",
+        METRICS_DIR / "benchmark-multiple" / "mil",
+    ]
+
+    logger.info("Loading metrics...")
+    metrics = load_metrics(
+        list_metrics_dir=list_metrics_dir,
+        metrics_test=metrics_test,
+        pattern="fold=*;genes=Prostate_50_hvg_bench"
+
+    )
+    logger.info("Formatting metrics...")
+    metrics = enrich_and_format(metrics)
+    logger.info("Plotting barplot...")
+    plot_benchmark(metrics, metrics_test)
+    logger.info("Done.")
+
+    ### Review benchmark
     # Configuration
     list_models = ["istar", "HisToGene", "MclSTExp", "THItoGene"]
-    save_path = Path("figures/review-benchmark")
-    save_path.mkdir(parents=True, exist_ok=True)
 
     # Embeddings
     logger.info("Loading metrics...")
@@ -103,34 +138,29 @@ if __name__ == "__main__":
     )
     logger.info("Formatting metrics...")
     metrics = enrich_and_format(metrics)
+
+    metrics = metrics
+    metrics["test_slide_fold"] = metrics.groupby("organ")["test_slide"].transform(
+        lambda x: x.factorize(sort=True)[0]
+    )
+    df = metrics[(metrics["test_slide_fold"] == metrics["fold"].astype(int))]
+
     logger.info("Plotting barplot...")
     plot_barplot(
-        metrics,
+        df,
         x="organ",
         y="pcc",
         hue="embedding",
         title="Comparison of PCC on multiple slide training.",
-        save_path=save_path / "pcc_barplot.png",
+        save_path=SAVE_PATH / "pcc_barplot_emb.svg",
     )
     logger.info("Done.")
 
-    # # Metrics
-    # metrics_test = ["pcc", "scc", "mae", "rmse"]
-    # list_models = ["istar", "HisToGene", "MclSTExp", "THItoGene"]
-    # list_metrics_dir = [METRICS_DIR / model for model in list_models] + [
-    #     METRICS_DIR / "benchmark" / "mil",
-    #     METRICS_DIR / "benchmark-multiple" / "mil",
-    # ]
-    #
-    # logger.info("Loading metrics...")
-    # metrics = load_metrics(
-    #     list_metrics_dir=list_metrics_dir,
-    #     metrics_test=metrics_test,
-    #     pattern="fold=*;genes=Prostate_50_hvg_bench"
-    #
-    # )
-    # logger.info("Formatting metrics...")
-    # metrics = enrich_and_format(metrics)
-    # logger.info("Plotting barplot...")
-    # plot_benchmark(metrics)
-    # logger.info("Done.")
+    # Save source data
+    src_df = source_data(
+        df=df,
+        x="organ",
+        y="pcc",
+        hue="embedding",
+    )
+    src_df.to_csv(TABLE_SAVE_PATH / "pcc_barplot_emb.csv")

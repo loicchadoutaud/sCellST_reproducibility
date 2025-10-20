@@ -1,5 +1,4 @@
 import logging
-import os
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -33,7 +32,7 @@ def load_metrics(
     all_paths = []
     for metrics_dir in list_metrics_dir:
         all_paths.extend(list(metrics_dir.glob(glob_pattern)))
-        logger.info(f"Found {len(all_paths)} paths for cellst single slide")
+        logger.info(f"Found {len(all_paths)} paths")
 
     dfs = []
     for path in tqdm(all_paths):
@@ -42,16 +41,14 @@ def load_metrics(
             continue
         df = pd.read_csv(path, index_col=0)
         df["tag"] = path.stem
-        dfs.append(format_metric_df(df, metrics_test))
+        df = format_metric_df(df, metrics_test)
+        dfs.append(df)
     metrics = pd.concat(dfs).reset_index(drop=True)
 
     df_hp = pd.DataFrame(metrics["tag"].apply(split_to_dict).to_list())
     metrics = pd.concat([metrics, df_hp], axis=1)
 
     return metrics
-
-
-### Useless after
 
 
 def add_hp_columns(
@@ -86,7 +83,7 @@ def load_cell_adata(file_path: str) -> AnnData:
 
 
 def preprocess_adata(adata: AnnData) -> AnnData:
-    logger.info("Preprocessing cell adata...")
+    logger.info("Preprocessing spot adata...")
     # Filtering
     sc.pp.filter_genes(adata, min_counts=200)
     sc.pp.filter_genes(adata, min_cells=adata.shape[0] // 10)
