@@ -76,6 +76,7 @@ def plot_plasma_marker(data_dir: Path, slide_id: str, organ: str, group: str, ou
         ncols=5,
         show=False,
         return_fig=True,
+        wspace=0.
     )
 
     # rasterize only the scatter artists (keeps text/axes vector in SVG/PDF)
@@ -83,7 +84,7 @@ def plot_plasma_marker(data_dir: Path, slide_id: str, organ: str, group: str, ou
         for coll in getattr(ax, "collections", []):
             coll.set_rasterized(True)
 
-    fig.savefig(output_path, dpi=150, bbox_inches="tight")
+    fig.savefig(output_path, dpi=150, bbox_inches="tight", transparent=True)
 
 
 def create_marker_gene_table(

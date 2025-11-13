@@ -1,17 +1,20 @@
+import scanpy as sc
 import seaborn as sns
 from matplotlib import pyplot as plt
 from pandas import DataFrame
-import cv2
 from pathlib import Path
 from loguru import logger
 
-from sCellST_reproducibility.reproducibility_figures.utils_analyses import load_metrics
+from sCellST_reproducibility.reproducibility_figures.scalebar_ops import add_scale_bar
+from sCellST_reproducibility.reproducibility_figures.utils_analyses import load_metrics, load_visium
+from sCellST_reproducibility.reproducibility_figures.utils_plot import plot_he
 from sCellST_reproducibility.reproducibility_figures.utils_table import source_data
 from scellst.constant import METRICS_DIR
 from sCellST_reproducibility.submit_scripts.script_constants import visium_slides
 
 
 def enrich_and_format(metrics: DataFrame) -> DataFrame:
+    logger.info("Formatting metrics...")
     metrics["multislide_training"] = metrics["train_slide"].isna()
     metrics["model"] = metrics["model"].fillna("sCellST")
     metrics["organ"] = metrics["genes"].str.split("_").str[0]
@@ -31,6 +34,7 @@ def enrich_and_format(metrics: DataFrame) -> DataFrame:
 
 
 def plot_benchmark(metrics: DataFrame, save_path: Path, table_save_path: Path, ext: str = "svg") -> None:
+    logger.info("Plotting benchmark figures...")
     palette = sns.color_palette("magma", n_colors=5)
     palette = {
         model: color
@@ -127,25 +131,28 @@ def plot_benchmark(metrics: DataFrame, save_path: Path, table_save_path: Path, e
 
 
 def generate_thumbnails(ext: str = "svg") -> None:
-    target_size = (500, 500)
-    thumbnail_path = Path("/home/loic/Data/raw_hest/thumbnails")
+    logger.info("Generating thumbnails...")
+    adata_dir = Path("/home/loic/Downloads")
     for organ, slides in visium_slides.items():
         images = []
-        for slide in slides:
-            img_path = thumbnail_path / f"{slide}_downscaled_fullres.jpeg"
-            if not img_path.exists():
-                logger.info(f"Missing image for {slide}")
-                continue
-            img = cv2.imread(str(img_path))
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            img = cv2.resize(img, target_size)
-            images.append((img, slide))
-
         fig, axes = plt.subplots(4, 2, figsize=(8, 17), constrained_layout=True)
-        for ax, (img, name) in zip(axes.flatten(), images):
-            ax.imshow(img)
+        for ax, slide in zip(axes.flatten(), slides):
+            adata_path = adata_dir / f"{slide}.h5ad"
+            adata = load_visium(adata_path)
+            sc.pl.spatial(
+                adata,
+                img_key="downscaled_fullres",
+                show=False,
+                ax=ax,
+            )
+            img_key = next(iter(adata.uns["spatial"].keys()))
+            downscale_factor = adata.uns["spatial"][img_key]["scalefactors"]["tissue_downscaled_fullres_scalef"]
+            pixel_size = 55 / adata.uns["spatial"][img_key]["scalefactors"]["spot_diameter_fullres"]
+            um_px = pixel_size / downscale_factor
+            img_shape = adata.uns["spatial"][img_key]["images"]["downscaled_fullres"].shape
+            add_scale_bar(ax, um_px, img_shape)
+            ax.set_title(slide, fontsize=24)
             ax.axis("off")
-            ax.set_title(name, fontsize=24)
 
         # Hide extra axes
         for ax in axes.flatten()[len(images) :]:
@@ -172,13 +179,11 @@ if __name__ == "__main__":
     save_path.mkdir(parents=True, exist_ok=True)
     table_save_path.mkdir(parents=True, exist_ok=True)
 
-    # Plots
-    logger.info("Loading metrics...")
-    metrics = load_metrics(list_metrics_dir, metrics_test=metrics_test)
-    logger.info("Formatting metrics...")
-    metrics = enrich_and_format(metrics)
-    logger.info("Plotting benchmark figures...")
-    plot_benchmark(metrics, save_path, table_save_path)
-    logger.info("Generating thumbnails...")
+    # Metric plots
+    # metrics = load_metrics(list_metrics_dir, metrics_test=metrics_test)
+    # metrics = enrich_and_format(metrics)
+    # plot_benchmark(metrics, save_path, table_save_path)
+
+    # Thumbnails
     generate_thumbnails()
     logger.info("Done.")

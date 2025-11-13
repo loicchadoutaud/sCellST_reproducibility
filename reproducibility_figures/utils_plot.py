@@ -22,6 +22,7 @@ from sklearn.preprocessing import MinMaxScaler
 from statannotations.Annotator import Annotator
 from tqdm.auto import tqdm
 
+from sCellST_reproducibility.reproducibility_figures.scalebar_ops import add_scale_bar
 from sCellST_reproducibility.reproducibility_figures.utils_table import source_data
 from scellst.constant import (
     SUB_CLASS_LABELS,
@@ -51,7 +52,11 @@ def plot_he(adata: AnnData, title: str, save_path: Path, obs_color: str = None) 
         ax=ax,
     )
     _rasterize_points_in_axes(ax, rasterize=True)
-
+    img_key = next(iter(adata.uns["spatial"].keys()))
+    downscale_factor = adata.uns["spatial"][img_key]["scalefactors"]["tissue_downscaled_fullres_scalef"]
+    um_px = adata.uns["pixel_size"] / downscale_factor
+    img_shape = adata.uns["spatial"][img_key]["images"]["downscaled_fullres"].shape
+    add_scale_bar(ax, um_px, img_shape)
     ax.set_title(title)
     ax.set_axis_off()
     if ax.get_legend() is not None:
@@ -236,26 +241,31 @@ def plot_list_gene_image(
     list_gene_name: list[str],
     save_path: Path,
     img_level: int,
+    um_px: float,
 ) -> None:
+    # Image parameters
+    cell_radius = 14 // (img_level + 1)
+    spot_radius = int(
+                spot_adata.uns["spatial"][next(iter(spot_adata.uns["spatial"].keys()))][
+                    "scalefactors"
+                ]["spot_diameter_fullres"]
+                / 2
+            ) // 2**img_level
+
+
     # Create image
     celltype_image = create_gene_img(
         cell_adata.obsm[f"spatial_{img_level}"],
         cell_adata.obs["class"].values,
         np.zeros_like(wsi_image),
-        14 // (img_level + 1),
+        cell_radius,
     )
     spot_images = [
         create_gene_img(
             spot_adata.obsm[f"spatial_{img_level}"],
             spot_adata[:, gene_name].X.toarray().squeeze(),
             np.zeros_like(wsi_image),
-            int(
-                spot_adata.uns["spatial"][next(iter(spot_adata.uns["spatial"].keys()))][
-                    "scalefactors"
-                ]["spot_diameter_fullres"]
-                / 2
-            )
-            // 2**img_level,
+            spot_radius,
         )
         for gene_name in list_gene_name
     ]
@@ -264,7 +274,7 @@ def plot_list_gene_image(
             cell_adata.obsm[f"spatial_{img_level}"],
             cell_adata[:, gene_name].X.squeeze(),
             np.zeros_like(wsi_image),
-            14 // (img_level + 1),
+            cell_radius,
         )
         for gene_name in list_gene_name
     ]
@@ -278,6 +288,7 @@ def plot_list_gene_image(
         gridspec_kw={"width_ratios": [8] * (len(list_gene_name) + 1) + [2]},
     )
     axes[0, 0].imshow(wsi_image)
+    add_scale_bar(axes[0, 0], um_px, wsi_image.shape)
     axes[1, 0].imshow(celltype_image)
     for i in range(len(list_gene_name)):
         axes[0, 1 + i].imshow(spot_images[i])
@@ -285,7 +296,7 @@ def plot_list_gene_image(
 
     # Add plot info
     titles = ["H&E", "Cell types"] + [
-        f"{m} {g}" for g in list_gene_name for m in ["Visium", "CellST"]
+        f"{m} {g}" for g in list_gene_name for m in ["Visium", "sCellST"]
     ]
     for ax, title in zip(axes[:, :-1].flatten(order="F"), titles):
         ax.axis("off")

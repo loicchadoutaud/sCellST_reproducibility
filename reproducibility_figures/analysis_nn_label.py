@@ -47,6 +47,7 @@ def run_slide_analysis(
     spot_adata = load_visium(spot_adata_path)
     cell_adata = load_predictions(prediction_adata_path)
     wsi = OpenSlide(wsi_path)
+    um_px = float(wsi.properties.get("openslide.mpp-x", None))
 
     # Plot H&E slides
     plot_he(spot_adata, title="H&E", save_path=save_path / f"he.{ext}")
@@ -79,6 +80,7 @@ def run_slide_analysis(
             genes_to_plot,
             save_path / f"local_crops_{i}.{ext}",
             0,
+            um_px,
         )
 
     # Print cell class distribution

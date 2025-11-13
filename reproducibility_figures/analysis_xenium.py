@@ -144,14 +144,14 @@ def run_xenium_analysis():
     table_save_path.mkdir(parents=True, exist_ok=True)
     metrics_test = ["pcc", "scc"]
 
-    # # Single slide plots
-    # shape_name = "xenium_nucleus"
-    # xenium_slides = {
-    #     "NCBI785": ["KRT8", "PTPRC"],
-    #     "TENX95": ["EPCAM", "CD3E"],
-    # }
-    # for slide_id, genes in xenium_slides.items():
-    #     plot_xenium_exp(data_dir, slide_id, genes, shape_name, save_path)
+    # Single slide plots
+    shape_name = "xenium_nucleus"
+    xenium_slides = {
+        "NCBI785": ["KRT8", "PTPRC"],
+        "TENX95": ["EPCAM", "CD3E"],
+    }
+    for slide_id, genes in xenium_slides.items():
+        plot_xenium_exp(data_dir, slide_id, genes, shape_name, save_path)
 
     # Multiple slide experiments
     metrics_dir = METRICS_DIR / "xenium" / "xenium"

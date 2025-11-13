@@ -25,6 +25,7 @@ def load_metrics(
     metrics_test: list[str],
     pattern: str | None = None,
 ) -> pd.DataFrame:
+    logger.info("Loading metrics...")
     if isinstance(list_metrics_dir, Path):
         list_metrics_dir = [list_metrics_dir]
     glob_pattern = f"*{pattern}*" if pattern else "*"
